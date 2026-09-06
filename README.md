@@ -5,13 +5,6 @@ a small, single-purpose C++ image decode/resize/composite/encode library. No
 algorithm is reimplemented here: `src/FastResize.php` calls straight into
 `fastresize_capi.h`'s C ABI shim (bundled in `native/`) via PHP's `ext-ffi`.
 
-Extracted from [detail-image-bench](https://github.com/mattsplat/detail-image-bench),
-where it replaced `jcupitt/vips` (also FFI-based, but backed by libvips) -
-that project's benchmark found every libvips-backed candidate slower than a
-plain decode/resize/composite/encode pipeline for its workload. If the same
-is true for yours, this gives you that pipeline as a Composer package
-instead of copy-pasting it.
-
 ## Install
 
 ```sh
