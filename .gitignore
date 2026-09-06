@@ -1,0 +1,5 @@
+/vendor/
+native/vendor/
+libfastresize_capi.so
+libfastresize_capi.dylib
+composer.lock
