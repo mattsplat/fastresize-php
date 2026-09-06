@@ -2,6 +2,7 @@
     "name": "mattsplat/fastresize-php",
     "description": "PHP FFI binding for fastresize - a fast C++ image decode/resize/composite/encode library - as an alternative to libvips-backed wrappers like jcupitt/vips.",
     "type": "library",
+    "license": "MIT",
     "require": {
         "php": ">=8.1",
         "ext-ffi": "*"

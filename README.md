@@ -56,3 +56,7 @@ See `fastresize_capi.h` in `native/` (or the
 [fastresize](https://github.com/mattsplat/fastresize) repo) for the full
 underlying API and `fastresize.h`'s own header comment for the case against
 libvips this library is making.
+
+## License
+
+MIT - see [LICENSE](./LICENSE).
