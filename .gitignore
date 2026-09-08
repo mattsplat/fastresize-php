@@ -3,3 +3,5 @@ native/vendor/
 libfastresize_capi.so
 libfastresize_capi.dylib
 composer.lock
+/.phpunit.cache/
+.phpunit.result.cache
