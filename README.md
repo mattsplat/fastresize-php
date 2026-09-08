@@ -20,9 +20,11 @@ composer run-script build   # or: make -C vendor/mattsplat/fastresize-php/native
 ```
 
 This curls the pinned `stb_image`/`stb_image_resize2`/`stb_image_write`
-headers into `native/vendor/` and compiles `libfastresize_capi.so` (`.dylib`
-on macOS) into the package root, right next to `native/`. Requires a C++17
-compiler (`clang++` by default - override with `make CXX=g++`) and `curl`.
+headers and [fpng](https://github.com/richgel999/fpng) (`v1.0.6`, the PNG
+encoder - ~12x faster than `stb_image_write`, ~8% larger files) into
+`native/vendor/` and compiles `libfastresize_capi.so` (`.dylib` on macOS)
+into the package root, right next to `native/`. Requires a C++17 compiler
+(`clang++` by default - override with `make CXX=g++`) and `curl`.
 `ext-ffi` must be enabled (`ffi.enable=1` in php.ini, or `"preload"` per the
 [PHP FFI docs](https://www.php.net/manual/en/book.ffi.php) for non-CLI
 SAPIs).
@@ -37,18 +39,29 @@ $bytes = file_get_contents('background.png');
 
 $bg = FastResize::decode($bytes);
 $fg = FastResize::decode(file_get_contents('foreground.png'));
-$fg = FastResize::resizeNearest($fg, 200, 200);
 
-$canvas = FastResize::newCanvas($bg->width(), $bg->height());
+// crop the decoded foreground to its non-transparent region before resizing,
+// so a mostly-transparent asset only costs its drawing to cache/composite.
+[$ox, $oy, $ow, $oh] = FastResize::opaqueRect($fg);
+$fgCropped = FastResize::crop($fg, $ox, $oy, $ow, $oh);
+$fgSmall = FastResize::resizeNearest($fgCropped, 200, 200);
+
+// solid white canvas so a 3-channel encode has an honest background
+$canvas = FastResize::newCanvas($bg->width(), $bg->height(), 255, 255, 255, 255);
 FastResize::compositeOver($canvas, $bg, 0, 0);
-FastResize::compositeOver($canvas, $fg, 40, 40);
+FastResize::compositeOver($canvas, $fgSmall, 40, 40);
 
-file_put_contents('out.png', FastResize::encodePng($canvas));
+// encodePngRgb flattens transparency onto the background and drops the alpha
+// channel - a 3-channel PNG a downstream decoder (e.g. a PDF) can take fast.
+file_put_contents('out.png', FastResize::encodePngRgb($canvas));
+// ...or FastResize::encodePng($canvas) for a 4-channel RGBA PNG.
 
 // FRImage handles are native heap memory, not PHP-GC'd - free every one
 // you allocated, exactly once.
 FastResize::free($bg);
 FastResize::free($fg);
+FastResize::free($fgCropped);
+FastResize::free($fgSmall);
 FastResize::free($canvas);
 ```
 
