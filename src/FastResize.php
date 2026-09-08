@@ -65,6 +65,14 @@ final class FastResize
         return self::ffi()->fr_last_error();
     }
 
+    // A C function returning a NULL FRImage* comes back from PHP FFI as PHP
+    // null (not a null CData), so FFI::isNull() alone would TypeError on the
+    // very failure it is meant to catch.
+    private static function isNullPtr(?CData $ptr): bool
+    {
+        return $ptr === null || FFI::isNull($ptr);
+    }
+
     // PHP FFI does NOT auto-cast a PHP string to uint8_t* the way it does
     // for char*/const char* - measured directly against the real compiled
     // library ("Passing incompatible argument 1... expecting 'uint8_t*',
@@ -98,7 +106,7 @@ final class FastResize
         $ffi = self::ffi();
         $buf = self::toCBuffer($bytes);
         $ptr = $ffi->fr_decode($buf, strlen($bytes));
-        if (FFI::isNull($ptr)) {
+        if (self::isNullPtr($ptr)) {
             throw new \RuntimeException('fastresize decode failed: ' . self::lastError());
         }
         return new FastImage($ptr);
@@ -119,7 +127,7 @@ final class FastResize
         $ptr = ($r === 0 && $g === 0 && $b === 0 && $a === 0)
             ? $ffi->fr_new_canvas($width, $height)
             : $ffi->fr_new_canvas_rgba($width, $height, $r, $g, $b, $a);
-        if (FFI::isNull($ptr)) {
+        if (self::isNullPtr($ptr)) {
             throw new \RuntimeException('fastresize canvas allocation failed: ' . self::lastError());
         }
         return new FastImage($ptr);
@@ -133,7 +141,7 @@ final class FastResize
     public static function resizeNearest(FastImage $src, int $targetWidth, int $targetHeight): FastImage
     {
         $ptr = self::ffi()->fr_resize_nearest($src->ptr(), $targetWidth, $targetHeight);
-        if (FFI::isNull($ptr)) {
+        if (self::isNullPtr($ptr)) {
             throw new \RuntimeException('fastresize resize failed: ' . self::lastError());
         }
         return new FastImage($ptr);
@@ -186,7 +194,7 @@ final class FastResize
     public static function crop(FastImage $img, int $x, int $y, int $w, int $h): FastImage
     {
         $ptr = self::ffi()->fr_crop($img->ptr(), $x, $y, $w, $h);
-        if (FFI::isNull($ptr)) {
+        if (self::isNullPtr($ptr)) {
             throw new \RuntimeException('fastresize crop failed: ' . self::lastError());
         }
         return new FastImage($ptr);

@@ -70,6 +70,20 @@ See `fastresize_capi.h` in `native/` (or the
 underlying API and `fastresize.h`'s own header comment for the case against
 libvips this library is making.
 
+## Tests
+
+```sh
+make -C native          # the tests need the compiled library
+composer install
+composer test            # phpunit
+```
+
+`tests/FastResizeTest.php` drives every method against the real compiled
+library (decode/probe/resize/crop/fill/composite/encode, opaque-rect
+tightness, RGB-vs-RGBA output, transparent-pixel flattening). The pixel
+assertions use `ext-gd` and self-skip if it is missing. CI runs the suite
+on PHP 8.1–8.4.
+
 ## License
 
 MIT - see [LICENSE](./LICENSE).
