@@ -27,10 +27,15 @@ final class FastResize
                 int fr_probe_dimensions(const uint8_t* data, size_t len, int* out_width, int* out_height);
                 FRImage* fr_resize_nearest(const FRImage* src, int target_width, int target_height);
                 FRImage* fr_new_canvas(int width, int height);
+                FRImage* fr_new_canvas_rgba(int width, int height, int r, int g, int b, int a);
+                void fr_fill(FRImage* img, int r, int g, int b, int a);
                 void fr_composite_over(FRImage* canvas, const FRImage* src, int x, int y);
                 int fr_width(const FRImage* img);
                 int fr_height(const FRImage* img);
+                int fr_opaque_rect(const FRImage* img, int* x, int* y, int* w, int* h);
+                FRImage* fr_crop(const FRImage* src, int x, int y, int w, int h);
                 int fr_encode_png(const FRImage* img, uint8_t** out_data, size_t* out_len);
+                int fr_encode_png_rgb(const FRImage* img, int r, int g, int b, uint8_t** out_data, size_t* out_len);
                 void fr_free_buffer(uint8_t* data);
                 void fr_image_free(FRImage* img);
                 const char* fr_last_error(void);
@@ -99,13 +104,30 @@ final class FastResize
         return new FastImage($ptr);
     }
 
-    public static function newCanvas(int $width, int $height): FastImage
-    {
-        $ptr = self::ffi()->fr_new_canvas($width, $height);
+    // Default (0,0,0,0) is fully transparent zeros and takes the original
+    // 2-arg C path unchanged; any non-zero channel pre-fills the canvas with
+    // that straight-alpha RGBA colour (e.g. 255,255,255,255 for solid white).
+    public static function newCanvas(
+        int $width,
+        int $height,
+        int $r = 0,
+        int $g = 0,
+        int $b = 0,
+        int $a = 0,
+    ): FastImage {
+        $ffi = self::ffi();
+        $ptr = ($r === 0 && $g === 0 && $b === 0 && $a === 0)
+            ? $ffi->fr_new_canvas($width, $height)
+            : $ffi->fr_new_canvas_rgba($width, $height, $r, $g, $b, $a);
         if (FFI::isNull($ptr)) {
             throw new \RuntimeException('fastresize canvas allocation failed: ' . self::lastError());
         }
         return new FastImage($ptr);
+    }
+
+    public static function fill(FastImage $img, int $r, int $g, int $b, int $a = 255): void
+    {
+        self::ffi()->fr_fill($img->ptr(), $r, $g, $b, $a);
     }
 
     public static function resizeNearest(FastImage $src, int $targetWidth, int $targetHeight): FastImage
@@ -132,6 +154,44 @@ final class FastResize
         return self::ffi()->fr_height($img->ptr());
     }
 
+    /**
+     * Conservative bounding rect of the image's non-transparent pixels (a
+     * superset - never smaller than the true bounds). [0, 0, 0, 0] if the
+     * image is fully transparent.
+     *
+     * @return array{0: int, 1: int, 2: int, 3: int} [x, y, w, h]
+     */
+    public static function opaqueRect(FastImage $img): array
+    {
+        $ffi = self::ffi();
+        $x = $ffi->new('int');
+        $y = $ffi->new('int');
+        $w = $ffi->new('int');
+        $h = $ffi->new('int');
+        $rc = $ffi->fr_opaque_rect(
+            $img->ptr(),
+            FFI::addr($x),
+            FFI::addr($y),
+            FFI::addr($w),
+            FFI::addr($h),
+        );
+        if ($rc !== 0) {
+            throw new \RuntimeException('fastresize opaque rect failed: ' . self::lastError());
+        }
+        return [$x->cdata, $y->cdata, $w->cdata, $h->cdata];
+    }
+
+    // Copies out a sub-rectangle, clamped to the source. The caller owns
+    // adding ($x, $y) back when compositing the result.
+    public static function crop(FastImage $img, int $x, int $y, int $w, int $h): FastImage
+    {
+        $ptr = self::ffi()->fr_crop($img->ptr(), $x, $y, $w, $h);
+        if (FFI::isNull($ptr)) {
+            throw new \RuntimeException('fastresize crop failed: ' . self::lastError());
+        }
+        return new FastImage($ptr);
+    }
+
     public static function encodePng(FastImage $img): string
     {
         $ffi = self::ffi();
@@ -140,6 +200,27 @@ final class FastResize
         $rc = $ffi->fr_encode_png($img->ptr(), FFI::addr($outData), FFI::addr($outLen));
         if ($rc !== 0) {
             throw new \RuntimeException('fastresize encode failed: ' . self::lastError());
+        }
+        $result = FFI::string($outData, $outLen->cdata);
+        $ffi->fr_free_buffer($outData);
+        return $result;
+    }
+
+    // Flattens transparent pixels onto a solid background (white by default),
+    // then encodes a 3-channel RGB PNG - no alpha channel. Saves the consumer
+    // a flatten pass in PHP when the downstream decoder has a slow RGBA path.
+    public static function encodePngRgb(
+        FastImage $img,
+        int $r = 255,
+        int $g = 255,
+        int $b = 255,
+    ): string {
+        $ffi = self::ffi();
+        $outData = $ffi->new('uint8_t*');
+        $outLen = $ffi->new('size_t');
+        $rc = $ffi->fr_encode_png_rgb($img->ptr(), $r, $g, $b, FFI::addr($outData), FFI::addr($outLen));
+        if ($rc !== 0) {
+            throw new \RuntimeException('fastresize RGB encode failed: ' . self::lastError());
         }
         $result = FFI::string($outData, $outLen->cdata);
         $ffi->fr_free_buffer($outData);
